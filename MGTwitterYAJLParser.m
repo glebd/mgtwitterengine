@@ -41,34 +41,24 @@ int process_yajl_boolean(void * ctx, int boolVal)
     return 1;
 }
 
-int process_yajl_integer(void *ctx, long integerVal)
+int process_yajl_number(void *ctx, const char *numberVal, unsigned int numberLen)
 {
 	id self = ctx;
-	
- 	if (currentKey)
+  
+	if (currentKey)
 	{
-		[self addValue:[NSNumber numberWithLong:integerVal] forKey:currentKey];
+		NSString *stringValue = [[NSString alloc] initWithBytesNoCopy:(void *)numberVal length:numberLen encoding:NSUTF8StringEncoding freeWhenDone:NO];
+
+		NSNumber *longLongValue = [NSNumber numberWithLongLong:[stringValue longLongValue]];
+		[self addValue:longLongValue forKey:currentKey];
+
+		[stringValue release];
 
 		[currentKey release];
-		currentKey = nil;
+		currentKey = nil;    
 	}
 
-    return 1;
-}
-
-int process_yajl_double(void *ctx, double doubleVal)
-{
-	id self = ctx;
-	
- 	if (currentKey)
-	{
-		[self addValue:[NSNumber numberWithDouble:doubleVal] forKey:currentKey];
-
-		[currentKey release];
-		currentKey = nil;
-	}
-
-   return 1;
+	return 1;
 }
 
 int process_yajl_string(void *ctx, const unsigned char * stringVal, unsigned int stringLen)
@@ -77,15 +67,31 @@ int process_yajl_string(void *ctx, const unsigned char * stringVal, unsigned int
 	
 	if (currentKey)
 	{
-		NSString *value = [[[NSString alloc] initWithBytes:stringVal length:stringLen encoding:NSUTF8StringEncoding] autorelease];
+		NSMutableString *value = [[[NSMutableString alloc] initWithBytes:stringVal length:stringLen encoding:NSUTF8StringEncoding] autorelease];
 		
+		[value replaceOccurrencesOfString:@"&gt;" withString:@">" options:NSCaseInsensitiveSearch range:NSMakeRange(0, [value length])];
+		[value replaceOccurrencesOfString:@"&lt;" withString:@"<" options:NSCaseInsensitiveSearch range:NSMakeRange(0, [value length])];
+		[value replaceOccurrencesOfString:@"&amp;" withString:@"&" options:NSCaseInsensitiveSearch range:NSMakeRange(0, [value length])];
+		[value replaceOccurrencesOfString:@"&quot;" withString:@"\"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, [value length])];
+
 		if ([currentKey isEqualToString:@"created_at"])
 		{
 			// we have a priori knowledge that the value for created_at is a date, not a string
 			struct tm theTime;
-			strptime([value UTF8String], "%a %b %d %H:%M:%S +0000 %Y", &theTime);
+			if ([value hasSuffix:@"+0000"])
+			{
+				// format for Search API: "Fri, 06 Feb 2009 07:28:06 +0000"
+				strptime([value UTF8String], "%a, %d %b %Y %H:%M:%S +0000", &theTime);
+			}
+			else
+			{
+				// format for REST API: "Thu Jan 15 02:04:38 +0000 2009"
+				strptime([value UTF8String], "%a %b %d %H:%M:%S +0000 %Y", &theTime);
+			}
 			time_t epochTime = timegm(&theTime);
-			[self addValue:[NSDate dateWithTimeIntervalSince1970:epochTime] forKey:currentKey];
+			// save the date as a long with the number of seconds since the epoch in 1970
+			[self addValue:[NSNumber numberWithLong:epochTime] forKey:currentKey];
+			// this value can be converted to a date with [NSDate dateWithTimeIntervalSince1970:epochTime]
 		}
 		else
 		{
@@ -150,17 +156,17 @@ int process_yajl_end_array(void *ctx)
 }
 
 static yajl_callbacks callbacks = {
-    process_yajl_null,
-    process_yajl_boolean,
-    process_yajl_integer,
-    process_yajl_double,
-    NULL,
-    process_yajl_string,
-    process_yajl_start_map,
-    process_yajl_map_key,
-    process_yajl_end_map,
-    process_yajl_start_array,
-    process_yajl_end_array
+	process_yajl_null,
+	process_yajl_boolean,
+	NULL,
+	NULL,
+	process_yajl_number,
+	process_yajl_string,
+	process_yajl_start_map,
+	process_yajl_map_key,
+	process_yajl_end_map,
+	process_yajl_start_array,
+	process_yajl_end_array
 };
 
 #pragma mark Creation and Destruction
@@ -209,21 +215,29 @@ static yajl_callbacks callbacks = {
 		
 		if ([json length] <= 5)
 		{
-			// this is a hack for API methods that return short JSON responses that can't be parsed by YAJL. These include:
+			// NOTE: this is a hack for API methods that return short JSON responses that can't be parsed by YAJL. These include:
 			//   friendships/exists: returns "true" or "false"
 			//   help/test: returns "ok"
+			// An empty response of "[]" is a special case.
 			NSString *result = [[[NSString alloc] initWithBytes:[json bytes] length:[json length] encoding:NSUTF8StringEncoding] autorelease];
-			NSMutableDictionary *dictionary = [[[NSMutableDictionary alloc] initWithCapacity:1] autorelease];
+			if (! [result isEqualToString:@"[]"])
+			{
+				NSMutableDictionary *dictionary = [[[NSMutableDictionary alloc] initWithCapacity:1] autorelease];
 
-			if ([result isEqualToString:@"\"ok\""])
-			{
-				[dictionary setObject:[NSNumber numberWithBool:YES] forKey:@"ok"];
+				if ([result isEqualToString:@"\"ok\""])
+				{
+					[dictionary setObject:[NSNumber numberWithBool:YES] forKey:@"ok"];
+				}
+				else
+				{
+					[dictionary setObject:[NSNumber numberWithBool:[result isEqualToString:@"true"]] forKey:@"friends"];
+				}
+				[dictionary setObject:[NSNumber numberWithInt:requestType] forKey:TWITTER_SOURCE_REQUEST_TYPE];
+			
+				[self _parsedObject:dictionary];
+
+				[parsedObjects addObject:dictionary];
 			}
-			else
-			{
-				[dictionary setObject:[NSNumber numberWithBool:[result isEqualToString:@"true"]] forKey:@"friends"];
-			}
-			[parsedObjects addObject:dictionary];
 		}
 		else
 		{
@@ -232,7 +246,7 @@ static yajl_callbacks callbacks = {
 				0, // allowComments: if nonzero, javascript style comments will be allowed in the input (both /* */ and //)
 				0  // checkUTF8: if nonzero, invalid UTF8 strings will cause a parse error
 			};
-			_handle = yajl_alloc(&callbacks, &cfg, self);
+			_handle = yajl_alloc(&callbacks, &cfg, NULL, self);
 			if (! _handle)
 			{
 				return nil;
@@ -244,7 +258,7 @@ static yajl_callbacks callbacks = {
 				unsigned char *errorMessage = yajl_get_error(_handle, 0, [json bytes], [json length]);
 				NSLog(@"MGTwitterYAJLParser: error = %s", errorMessage);
 				[self _parsingErrorOccurred:[NSError errorWithDomain:@"YAJL" code:status userInfo:[NSDictionary dictionaryWithObject:[NSString stringWithUTF8String:(char *)errorMessage] forKey:@"errorMessage"]]];
-				yajl_free_error(errorMessage);
+				yajl_free_error(_handle, errorMessage);
 			}
 
 			// free the yajl parser
