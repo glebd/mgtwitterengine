@@ -2,11 +2,11 @@
 //  MGTwitterEngineConstants.h
 //
 
-extern NSString *const kMGTwitterEngineSinceIdRequestOption;
-extern NSString *const kMGTwitterEngineMaxIdRequestOption;
-extern NSString *const kMGTwitterEnginePageRequestOption;
-extern NSString *const kMGTwitterEngineCountRequestOption;
-extern NSString *const kMGTwitterEngineStatusRequestOption;
-extern NSString *const kMGTwitterEngineInReplyToStatusIdRequestOption;
-extern NSString *const kMGTwitterEngineIncludeEntitiesRequestOption;
-extern NSString *const kMGTwitterEngineIncludeRetweetsRequestOption;
+extern NSString *const kMGTwitterEngineSinceIdOption;
+extern NSString *const kMGTwitterEngineMaxIdOption;
+extern NSString *const kMGTwitterEnginePageOption;
+extern NSString *const kMGTwitterEngineCountOption;
+extern NSString *const kMGTwitterEngineStatusOption;
+extern NSString *const kMGTwitterEngineInReplyToStatusIdOption;
+extern NSString *const kMGTwitterEngineIncludeEntitiesOption;
+extern NSString *const kMGTwitterEngineIncludeRetweetsOption;
