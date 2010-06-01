@@ -957,6 +957,18 @@
                            responseType:MGTwitterStatuses];
 }
 
+- (NSString *)getFollowedTimeline:(NSDictionary *)params
+{
+	NSString *path = [NSString stringWithFormat:@"statuses/friends_timeline.%@",
+                      API_FORMAT];
+    return [self _sendRequestWithMethod:nil
+                                   path:path
+                        queryParameters:params
+                                   body:nil
+                            requestType:MGTwitterFollowedTimelineRequest
+                           responseType:MGTwitterStatuses];
+}
+
 
 #pragma mark -
 
