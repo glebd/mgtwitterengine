@@ -59,6 +59,9 @@
 	}
 	else
 	{
+        if (!_status)
+            return;
+        
 		[_status setObject:[NSNumber numberWithInt:requestType] forKey:TWITTER_SOURCE_REQUEST_TYPE];
 		
 		[self _parsedObject:_status];
